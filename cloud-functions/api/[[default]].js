@@ -1,5 +1,6 @@
 import express from "express";
 import { randomUUID } from "node:crypto";
+import { getStore } from "@edgeone/pages-blob";
 
 /* ===== 种子数据（从 storage-impl 原样迁移） ===== */
 function seedCopies() {
@@ -205,48 +206,31 @@ function seedCopies() {
   ];
 }
 
-/* ===== 存储层 ===== */
-const UPSTASH_URL = process.env.UPSTASH_REST_URL || "";
-const UPSTASH_TOKEN = process.env.UPSTASH_REST_TOKEN || "";
-const KEY = "life-copies";
-const useUpstash = Boolean(UPSTASH_URL && UPSTASH_TOKEN);
+/* ===== 存储层（EdgeOne Blob，跨部署持久化） ===== */
+let store = null;
+try {
+  store = getStore("life-copies");
+} catch (e) {
+  console.error("blob store init failed, fallback to memory:", e.message);
+}
+const KEY = "copies";
 const memoryStore = { data: null };
-
-async function upstashGet() {
-  const res = await fetch(`${UPSTASH_URL}/get/${KEY}`, {
-    headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
-  });
-  if (!res.ok) throw new Error("upstash get " + res.status);
-  const data = await res.json();
-  const raw = data && data.result;
-  if (!raw) return null;
-  const parsed = JSON.parse(raw);
-  return Array.isArray(parsed) ? parsed : null;
-}
-
-async function upstashSet(copies) {
-  const value = encodeURIComponent(JSON.stringify(copies));
-  const res = await fetch(`${UPSTASH_URL}/set/${KEY}/${value}`, {
-    headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
-  });
-  if (!res.ok) throw new Error("upstash set " + res.status);
-}
 
 async function loadCopies() {
   if (memoryStore.data) return memoryStore.data;
-  if (useUpstash) {
+  if (store) {
     try {
-      const remote = await upstashGet();
-      if (remote && remote.length) {
+      const remote = await store.get(KEY, { type: "json", consistency: "strong" });
+      if (remote && Array.isArray(remote)) {
         memoryStore.data = remote;
         return remote;
       }
       const seed = seedCopies();
-      await upstashSet(seed);
+      await store.setJSON(KEY, seed, { onlyIfNew: true });
       memoryStore.data = seed;
       return seed;
     } catch (e) {
-      console.error("upstash load failed, fallback to memory seed:", e.message);
+      console.error("blob load failed, fallback to memory seed:", e.message);
     }
   }
   const seed = seedCopies();
@@ -256,11 +240,11 @@ async function loadCopies() {
 
 async function saveCopies(copies) {
   memoryStore.data = copies;
-  if (useUpstash) {
+  if (store) {
     try {
-      await upstashSet(copies);
+      await store.setJSON(KEY, copies);
     } catch (e) {
-      console.error("upstash save failed:", e.message);
+      console.error("blob save failed:", e.message);
     }
   }
 }
@@ -271,7 +255,7 @@ let copies = [];
 loadCopies()
   .then((list) => {
     copies = list;
-    console.log("loaded " + copies.length + " copies (" + (useUpstash ? "upstash" : "memory") + ")");
+    console.log("loaded " + copies.length + " copies (" + (store ? "edgeone blob" : "memory") + ")");
   })
   .catch((e) => {
     console.error("loadCopies failed:", e.message);
