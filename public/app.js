@@ -162,6 +162,236 @@ function shardCount(p) {
   return (p.shards || []).length;
 }
 
+/* ================= 副本库（本地文件式，无服务器） ================= */
+
+const COPIES_KEY = "inf-space-copies-v1";
+
+const SEED_COPIES = [
+  {
+    id: "seed-teacher",
+    title: "小镇教师的一生",
+    author: "系统内置",
+    description: "出生在小镇，父母都是普通工人。你要决定自己的一生：安心教书，还是闯出去看看世界？",
+    coverColor: "#7c9a6d",
+    createdAt: 1,
+    config: {
+      name: "你",
+      startAge: 0,
+      maxAge: 78,
+      year0: 1986,
+      background: "1986 年，你出生在一个南方小镇。父亲是工厂钳工，母亲在镇上小学教书。家里不算富裕，但日子安稳。",
+      stats: { 金钱: 200, 健康: 85, 智力: 55, 魅力: 50, 幸运: 50, 心情: 60 },
+      statMeta: {
+        金钱: { min: 0, max: 10000 },
+        健康: { min: 0, max: 100 },
+        智力: { min: 0, max: 100 },
+        魅力: { min: 0, max: 100 },
+        幸运: { min: 0, max: 100 },
+        心情: { min: 0, max: 100 },
+      },
+      freeActions: [
+        { name: "读书", effects: { 智力: 6, 心情: -1 } },
+        { name: "打工", effects: { 金钱: 30, 健康: -4, 心情: -2 } },
+        { name: "锻炼", effects: { 健康: 5, 心情: 1 } },
+        { name: "社交", effects: { 魅力: 4, 心情: 3, 金钱: -5 } },
+        { name: "休息", effects: { 健康: 4, 心情: 4 } },
+        { name: "投资", effects: { 金钱: 12, 幸运: -1 } },
+      ],
+      events: [
+        {
+          id: "e-elem", title: "小学开学", age: 7, chance: 1, condition: "", once: true,
+          text: "到了上学的年纪。母亲牵着你走进校门，回头看你的时候眼眶有点红。",
+          choices: [
+            { text: "好好学习", effects: { 智力: 10, 心情: 1 }, log: "你成了班里的尖子生。" },
+            { text: "跟同学玩个痛快", effects: { 魅力: 6, 智力: -3, 心情: 5 }, log: "你人缘很好，但成绩一般。" },
+          ],
+        },
+        {
+          id: "e-gaokao", title: "高考", age: 18, chance: 1, condition: "", once: true,
+          text: "十八岁，人生第一道大关。志愿表摆在桌上，父母都望着你。",
+          choices: [
+            { text: "报师范院校", effects: { 智力: 8, 魅力: 3, 金钱: -20 }, log: "你如愿考上了师范大学。" },
+            { text: "报外省大学，离开小镇", effects: { 智力: 10, 心情: 8, 金钱: -40 }, log: "你第一次坐上出省的火车。" },
+            { text: "放弃高考，去打工", effects: { 金钱: 60, 智力: -10, 心情: 2 }, log: "你早早走进了社会。" },
+          ],
+        },
+        {
+          id: "e-work", title: "第一份工作", age: 22, chance: 1, condition: "", once: true,
+          text: "毕业了。招聘会人山人海，你攥着简历，心里没底。",
+          choices: [
+            { text: "回镇上当老师", effects: { 金钱: 30, 智力: 4, 魅力: 3, 心情: 4 }, log: "你站在讲台上，看着台下几十双眼睛。" },
+            { text: "留在城里闯荡", effects: { 金钱: 50, 健康: -4, 心情: 2 }, log: "出租屋很小，梦想很大。" },
+            { text: "创业开小卖部", effects: { 金钱: 100, 幸运: -8, 心情: 5 }, log: "你盘下了一间临街的小店。" },
+          ],
+        },
+        {
+          id: "e-marriage", title: "婚姻", age: 27, chance: 0.7, condition: "", once: true,
+          text: "家里开始催婚。相亲对象坐在对面，气氛有点尴尬。",
+          choices: [
+            { text: "认真相处，步入婚姻", effects: { 魅力: 4, 金钱: -30, 心情: 10 }, log: "婚礼办得简朴，但很热闹。" },
+            { text: "以事业为重，暂不结婚", effects: { 金钱: 30, 心情: -3 }, log: "你选择先立业。" },
+          ],
+        },
+        {
+          id: "e-crisis", title: "中年危机", age: 42, chance: 1, condition: "金钱<2000", once: true,
+          text: "四十岁。单位传出要裁员的消息，房贷还有十五年。晚上你失眠了。",
+          choices: [
+            { text: "咬牙坚持，接私活补贴", effects: { 金钱: 120, 健康: -10, 心情: -5 }, log: "你开始在下班后接私活。" },
+            { text: "跳槽去新公司", effects: { 金钱: 150, 智力: 6, 幸运: -5 }, log: "新公司给的钱多，但离家更远。" },
+            { text: "卖掉房子回老家", effects: { 金钱: 500, 心情: 8, 智力: -3 }, log: "你卖掉了城里的房子，回了小镇。" },
+          ],
+        },
+        {
+          id: "e-retire", title: "退休", age: 65, chance: 1, condition: "", once: true,
+          text: "六十五岁，你办完了退休手续。回家的路上，阳光很好。",
+          choices: [
+            { text: "含饴弄孙，安享晚年", effects: { 心情: 12, 健康: 2 }, log: "孙辈绕膝，你觉得这辈子值了。" },
+            { text: "去环游世界", effects: { 金钱: -300, 心情: 15, 健康: -3 }, log: "你拖着行李箱，把年轻时没去的地方都走了一遍。" },
+            { text: "返聘回学校教书", effects: { 智力: 5, 心情: 5, 金钱: 30 }, log: "讲台是你最熟悉的地方。" },
+          ],
+        },
+      ],
+      endings: [
+        { id: "end-rich", name: "小有积蓄", condition: "金钱>=1000", text: "你攒下了一笔能让自己安心的钱。" },
+        { id: "end-widely", name: "桃李满天下", condition: "魅力>=75", text: "很多学生记得你，逢年过节都来看你。" },
+        { id: "end-happy", name: "知足常乐", condition: "心情>=85", text: "你这一生，没什么大富大贵，但心里一直很踏实。" },
+      ],
+    },
+  },
+  {
+    id: "seed-city",
+    title: "都市追梦者",
+    author: "系统内置",
+    description: "农村出身，大学毕业留在大城市。996、房租、梦想，你要怎么选？",
+    coverColor: "#4a6fa5",
+    createdAt: 1,
+    config: {
+      name: "你",
+      startAge: 22,
+      maxAge: 60,
+      year0: 2018,
+      background: "你从县城考到省城，毕业后进了互联网公司。工资不错，但房租吃掉一半。",
+      stats: { 金钱: 500, 健康: 80, 智力: 70, 魅力: 55, 幸运: 50, 心情: 60 },
+      statMeta: {
+        金钱: { min: 0, max: 100000 },
+        健康: { min: 0, max: 100 },
+        智力: { min: 0, max: 100 },
+        魅力: { min: 0, max: 100 },
+        幸运: { min: 0, max: 100 },
+        心情: { min: 0, max: 100 },
+      },
+      freeActions: [
+        { name: "加班", effects: { 金钱: 80, 健康: -8, 心情: -6 } },
+        { name: "学习新技能", effects: { 智力: 8, 心情: -2, 金钱: -10 } },
+        { name: "健身", effects: { 健康: 6, 心情: 2, 金钱: -8 } },
+        { name: "社交", effects: { 魅力: 5, 心情: 4, 金钱: -20 } },
+        { name: "休息", effects: { 健康: 5, 心情: 6 } },
+      ],
+      events: [
+        {
+          id: "c-offer", title: "跳槽机会", age: 25, chance: 0.8, condition: "智力>=70", once: true,
+          text: "猎头打电话来，一家创业公司想挖你，薪资翻倍，但随时可能倒闭。",
+          choices: [
+            { text: "跳槽博一把", effects: { 金钱: 200, 幸运: -10, 心情: 8 }, log: "你赌上了。" },
+            { text: "留在原公司稳一稳", effects: { 金钱: 60, 心情: 2 }, log: "你选择了稳定。" },
+          ],
+        },
+        {
+          id: "c-ill", title: "身体报警", age: 30, chance: 0.7, condition: "健康<55", once: true,
+          text: "体检报告出来了，几项指标飘红。医生说：再熬下去要出问题。",
+          choices: [
+            { text: "放下工作，休养一年", effects: { 健康: 25, 金钱: -150, 心情: 6 }, log: "你给自己放了个长假。" },
+            { text: "吃药硬扛，继续拼", effects: { 健康: -12, 金钱: 100, 心情: -4 }, log: "你不想停下。" },
+          ],
+        },
+        {
+          id: "c-home", title: "回家还是留下", age: 35, chance: 1, condition: "", once: true,
+          text: "父母年纪大了，打电话来问你要不要回老家。城市的户口、房贷、上升的职位……",
+          choices: [
+            { text: "回老家陪父母", effects: { 金钱: -100, 心情: 12, 魅力: 3 }, log: "你退掉了城里的房子。" },
+            { text: "留在城市继续打拼", effects: { 金钱: 200, 心情: -5, 健康: -3 }, log: "你挂掉电话，继续改方案。" },
+          ],
+        },
+      ],
+      endings: [
+        { id: "c-rich", name: "财务自由", condition: "金钱>=5000", text: "你终于可以不用为了钱工作了。" },
+        { id: "c-healthy", name: "健康长寿", condition: "健康>=80", text: "身体是本钱，你守住了。" },
+        { id: "c-happy", name: "人间值得", condition: "心情>=90", text: "回头看，每一步都值得。" },
+      ],
+    },
+  },
+];
+
+function loadLocalCopies() {
+  try {
+    const raw = localStorage.getItem(COPIES_KEY);
+    if (!raw) {
+      localStorage.setItem(COPIES_KEY, JSON.stringify(SEED_COPIES));
+      return JSON.parse(JSON.stringify(SEED_COPIES));
+    }
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return JSON.parse(JSON.stringify(SEED_COPIES));
+  }
+}
+
+function saveLocalCopies(list) {
+  localStorage.setItem(COPIES_KEY, JSON.stringify(list));
+}
+
+function findLocalCopy(id) {
+  return loadLocalCopies().find((c) => c.id === id) || null;
+}
+
+function normalizeImportedCopy(data) {
+  if (!data || typeof data !== "object" || !data.title || !data.config || typeof data.config !== "object") {
+    throw new Error("文件格式不对：需要包含标题（title）和配置（config）");
+  }
+  const cfg = data.config;
+  if (!cfg.stats || typeof cfg.stats !== "object" || !Object.keys(cfg.stats).length) {
+    throw new Error("配置里缺少属性（stats）");
+  }
+  const id = data.id && /^[a-zA-Z0-9-]{4,64}$/.test(String(data.id)) ? String(data.id) : "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  return {
+    id,
+    title: String(data.title).trim(),
+    author: String(data.author || "匿名").trim(),
+    description: String(data.description || "").trim(),
+    coverColor: /^#[0-9a-fA-F]{6}$/.test(data.coverColor || "") ? data.coverColor : "#a87b45",
+    createdAt: Number(data.createdAt) || Date.now(),
+    config: {
+      name: String(cfg.name || "你"),
+      startAge: Number(cfg.startAge) || 0,
+      maxAge: Number(cfg.maxAge) || 78,
+      year0: Number(cfg.year0) || 1970,
+      background: String(cfg.background || ""),
+      mission: String(cfg.mission || ""),
+      difficulty: cfg.difficulty ? Number(cfg.difficulty) : undefined,
+      reward: cfg.reward ? Number(cfg.reward) : undefined,
+      stats: cfg.stats,
+      statMeta: cfg.statMeta || {},
+      freeActions: Array.isArray(cfg.freeActions) ? cfg.freeActions : [],
+      events: Array.isArray(cfg.events) ? cfg.events : [],
+      endings: Array.isArray(cfg.endings) ? cfg.endings : [],
+    },
+  };
+}
+
+function importCopyToLocal(data, replace = false) {
+  const copy = normalizeImportedCopy(data);
+  const list = loadLocalCopies();
+  const idx = list.findIndex((c) => c.id === copy.id);
+  if (idx >= 0) {
+    if (!replace) return { ok: false, reason: "本机已存在同名副本「" + copy.title + "」，请选择覆盖或改名导入", copy };
+    list[idx] = copy;
+  } else {
+    list.unshift(copy);
+  }
+  saveLocalCopies(list);
+  return { ok: true, copy };
+}
+
 /* ================= 副本信息 ================= */
 
 function copyDifficulty(copy) {
@@ -538,18 +768,18 @@ function openLoreModal() {
 async function renderInstances() {
   const p = loadPlayer();
   const app = $("#app");
+  const list = loadLocalCopies();
   app.innerHTML = `<div class="page-title">副本库</div>
-    <div class="page-sub">每一个副本都是一个世界。进入前先看清任务与结局——然后，活着回来。</div>
-    <div id="grid" class="copy-grid"><div class="empty">加载中…</div></div>`;
-  let list;
-  try {
-    list = await api("/api/copies");
-  } catch (e) {
-    $("#grid").innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
-    return;
-  }
+    <div class="page-sub">每一个副本都是一个世界。副本保存在本机，可以导出文件发给别人；收到别人发来的副本，导入即可体验。</div>
+    <div class="lib-toolbar">
+      <button class="primary" id="btn-import-file">导入副本文件</button>
+      <button id="btn-import-paste">粘贴导入</button>
+      <input type="file" id="import-file" accept=".json,application/json" style="display:none" />
+    </div>
+    <div id="grid" class="copy-grid"></div>`;
+  bindLibraryImport();
   if (!list.length) {
-    $("#grid").innerHTML = `<div class="empty">还没有副本，<a href="#/editor">去设计第一个吧</a></div>`;
+    $("#grid").innerHTML = `<div class="empty">还没有副本。<br/>点上方「导入副本文件」，或去 <a href="#/editor">设计第一个副本</a>。</div>`;
     return;
   }
   $("#grid").innerHTML = list.map((c) => {
@@ -574,6 +804,7 @@ async function renderInstances() {
         <div class="copy-actions">
           <button class="primary" data-play="${esc(c.id)}">进入副本</button>
           <button data-edit="${esc(c.id)}">编辑</button>
+          <button data-share="${esc(c.id)}">分享</button>
           <button class="danger" data-del="${esc(c.id)}">删除</button>
         </div>
       </div>
@@ -582,18 +813,129 @@ async function renderInstances() {
 
   $$("[data-play]", app).forEach((b) => b.addEventListener("click", () => (location.hash = `#/play/${b.dataset.play}`)));
   $$("[data-edit]", app).forEach((b) => b.addEventListener("click", () => (location.hash = `#/editor/${b.dataset.edit}`)));
+  $$("[data-share]", app).forEach((b) => b.addEventListener("click", () => openShareCopyModal(findLocalCopy(b.dataset.share))));
   $$("[data-del]", app).forEach((b) =>
-    b.addEventListener("click", async () => {
+    b.addEventListener("click", () => {
       if (!confirm("确定删除这个副本吗？")) return;
-      try {
-        await api("/api/copies/" + b.dataset.del, "DELETE");
-        toast("已删除");
-        renderInstances();
-      } catch (e) {
-        toast("删除失败：" + e.message);
-      }
+      const list2 = loadLocalCopies().filter((c) => c.id !== b.dataset.del);
+      saveLocalCopies(list2);
+      toast("已删除");
+      renderInstances();
     })
   );
+}
+
+function bindLibraryImport() {
+  $("#btn-import-file").addEventListener("click", () => $("#import-file").click());
+  $("#import-file").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        handleImportResult(importCopyToLocal(data));
+      } catch (err) {
+        toast("导入失败：" + err.message);
+      }
+      e.target.value = "";
+    };
+    reader.readAsText(file);
+  });
+  $("#btn-import-paste").addEventListener("click", () => openPasteImportModal());
+}
+
+function handleImportResult(r) {
+  if (r.ok) {
+    toast("导入成功：「" + r.copy.title + "」");
+    renderInstances();
+  } else if (r.reason) {
+    const modal = openModal(`
+      <h2>副本已存在</h2>
+      <p class="hint-text">${esc(r.reason)}</p>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="primary" id="btn-overwrite">覆盖本机版本</button>
+        <button id="btn-cancel">取消</button>
+      </div>`);
+    $("#btn-overwrite", modal).addEventListener("click", () => {
+      const r2 = importCopyToLocal(r.copy, true);
+      closeModal();
+      if (r2.ok) {
+        toast("已覆盖导入：「" + r2.copy.title + "」");
+        renderInstances();
+      }
+    });
+    $("#btn-cancel", modal).addEventListener("click", closeModal);
+  }
+}
+
+function openPasteImportModal() {
+  const modal = openModal(`
+    <h2>粘贴导入副本</h2>
+    <p class="hint-text">在微信/QQ 里复制对方发来的副本内容（一长串 { "title": ... } 文本），粘贴到下面。</p>
+    <textarea id="paste-box" rows="8" placeholder="在这里粘贴副本 JSON 文本…" style="width:100%;font-size:12px"></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="primary" id="btn-paste-ok">导入</button>
+      <button id="btn-paste-cancel">取消</button>
+    </div>`);
+  $("#btn-paste-ok", modal).addEventListener("click", () => {
+    const raw = $("#paste-box", modal).value.trim();
+    if (!raw) return toast("请先粘贴内容");
+    try {
+      const data = JSON.parse(raw);
+      handleImportResult(importCopyToLocal(data));
+      closeModal();
+    } catch (e) {
+      toast("解析失败：" + e.message);
+    }
+  });
+  $("#btn-paste-cancel", modal).addEventListener("click", closeModal);
+}
+
+function openShareCopyModal(copy) {
+  if (!copy) return toast("副本不存在");
+  const jsonText = JSON.stringify(copy, null, 2);
+  const modal = openModal(`
+    <h2>分享副本</h2>
+    <p class="hint-text">把「${esc(copy.title)}」发给别人：对方下载文件后在副本库点「导入副本文件」，或复制文本后点「粘贴导入」。</p>
+    <div class="share-actions">
+      <button class="primary" id="btn-download">下载文件（.json）</button>
+      <button id="btn-copy">复制文本</button>
+    </div>
+    <div class="field" style="margin-top:12px"><label>副本文本（可直接复制）</label>
+      <textarea id="share-text" rows="6" readonly style="width:100%;font-size:11px">${esc(jsonText)}</textarea></div>
+    <p class="hint-text">提示：微信/QQ 直接发送 .json 文件即可；对方收不到文件时，改用「复制文本」粘贴发送。</p>
+  `);
+  $("#btn-download", modal).addEventListener("click", () => {
+    if (window.AndroidShare && window.AndroidShare.shareCopy) {
+      window.AndroidShare.shareCopy(copy.title || "无限流副本", jsonText);
+      return;
+    }
+    const blob = new Blob([jsonText], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (copy.title || "无限流副本") + ".json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  $("#btn-copy", modal).addEventListener("click", async () => {
+    if (window.AndroidShare && window.AndroidShare.copyText) {
+      window.AndroidShare.copyText(jsonText);
+      toast("已复制到剪贴板");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(jsonText);
+      toast("已复制到剪贴板");
+    } catch (e) {
+      const ta = $("#share-text", modal);
+      ta.removeAttribute("readonly");
+      ta.select();
+      document.execCommand("copy");
+      ta.setAttribute("readonly", "");
+      toast("已复制，请直接粘贴发送");
+    }
+  });
 }
 
 /* ================= 编辑器 ================= */
@@ -744,10 +1086,9 @@ async function renderEditor(id) {
   const app = $("#app");
   let copy;
   if (id) {
-    try {
-      copy = await api("/api/copies/" + id);
-    } catch (e) {
-      app.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+    copy = findLocalCopy(id);
+    if (!copy) {
+      app.innerHTML = `<div class="empty">副本不存在或已被删除，<a href="#/instances">返回副本库</a></div>`;
       return;
     }
   } else {
@@ -756,7 +1097,7 @@ async function renderEditor(id) {
 
   app.innerHTML = `
     <div class="page-title">${id ? "编辑副本" : "设计副本"}</div>
-    <div class="page-sub">设计一个世界：任务目标、属性、事件、选择、结局。保存后所有人都可以进入试炼。</div>
+    <div class="page-sub">设计一个世界：任务目标、属性、事件、选择、结局。保存到本机后，用「导出 JSON / 复制文本」发给别人体验。</div>
 
     <div class="form-card"><h3>副本信息</h3>${editorMetaForm(copy)}</div>
     <div class="form-card"><h3>副本设定（无限流）</h3>${editorInstanceForm(copy.config)}</div>
@@ -769,8 +1110,9 @@ async function renderEditor(id) {
     <div class="form-card"><h3>通关结局（达成条件时解锁，奖励加成）</h3>${editorEndingsForm(copy.config)}</div>
 
     <div class="toolbar">
-      <button class="primary" id="btn-save">保存并发布</button>
+      <button class="primary" id="btn-save">保存到本机</button>
       <button id="btn-export">导出 JSON</button>
+      <button id="btn-copy-json">复制文本</button>
       <button id="btn-import">导入 JSON</button>
       <input type="file" id="import-file" accept=".json,application/json" style="display:none" />
       <button id="btn-preview">试玩</button>
@@ -924,28 +1266,67 @@ async function renderEditor(id) {
     const data = collect();
     if (!data.title) return toast("请填写标题");
     if (!Object.keys(data.config.stats).length) return toast("请至少添加一个属性");
-    try {
-      if (id) {
-        await api("/api/copies/" + id, "PUT", data);
+    const list = loadLocalCopies();
+    if (id) {
+      const idx = list.findIndex((c) => c.id === id);
+      if (idx >= 0) {
+        const old = list[idx];
+        list[idx] = { ...old, ...data, config: data.config };
+        saveLocalCopies(list);
         toast("已保存更新");
-      } else {
-        const saved = await api("/api/copies", "POST", data);
-        toast("发布成功");
-        location.hash = "#/editor/" + saved.id;
+        return;
       }
-    } catch (e) {
-      toast("保存失败：" + e.message);
     }
+    const copy = normalizeImportedCopy({ ...data, id: undefined });
+    const list2 = loadLocalCopies();
+    list2.unshift(copy);
+    saveLocalCopies(list2);
+    toast("副本已保存到本机");
+    location.hash = "#/editor/" + copy.id;
   });
 
   $("#btn-export").addEventListener("click", () => {
     const data = collect();
+    if (window.AndroidShare && window.AndroidShare.shareCopy) {
+      window.AndroidShare.shareCopy(data.title || "无限流副本", JSON.stringify(data, null, 2));
+      return;
+    }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = (data.title || "无限流副本") + ".json";
     a.click();
     URL.revokeObjectURL(a.href);
+  });
+
+  $("#btn-copy-json").addEventListener("click", async () => {
+    const data = collect();
+    const jsonText = JSON.stringify(data, null, 2);
+    const modal = openModal(`
+      <h2>复制副本文本</h2>
+      <p class="hint-text">先点「保存到本机」再复制更稳妥。复制下面内容，粘贴到微信/QQ 发给对方。</p>
+      <textarea id="copy-json-text" rows="8" style="width:100%;font-size:11px">${esc(jsonText)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="primary" id="btn-copy-ok">复制</button>
+        <button id="btn-copy-close">关闭</button>
+      </div>`);
+    $("#btn-copy-ok", modal).addEventListener("click", async () => {
+      if (window.AndroidShare && window.AndroidShare.copyText) {
+        window.AndroidShare.copyText(jsonText);
+        toast("已复制");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(jsonText);
+        toast("已复制");
+      } catch (e) {
+        const ta = $("#copy-json-text", modal);
+        ta.select();
+        document.execCommand("copy");
+        toast("已复制，请直接粘贴");
+      }
+    });
+    $("#btn-copy-close", modal).addEventListener("click", closeModal);
   });
 
   $("#btn-import").addEventListener("click", () => $("#import-file").click());
@@ -1001,7 +1382,9 @@ async function loadPlayCopy(id) {
     if (!raw) throw new Error("没有试玩内容");
     return { id: "preview", ...JSON.parse(raw) };
   }
-  return api("/api/copies/" + id);
+  const c = findLocalCopy(id);
+  if (!c) throw new Error("副本不存在或已被删除");
+  return c;
 }
 
 async function renderPlay(id) {

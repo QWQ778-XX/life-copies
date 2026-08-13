@@ -419,6 +419,17 @@ button.link-btn:hover { text-decoration: underline; }
 
 /* ---------- 副本库 ---------- */
 
+.lib-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.share-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .copy-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
