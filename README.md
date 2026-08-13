@@ -35,21 +35,23 @@ node server.js
 
 代码已适配 Docker（见 `Dockerfile`），任何支持 Node/Docker 的免费平台都能直接部署。
 
-### 推荐：Zeabur（国内可访问、免费额度）
+### 推荐：Vercel（免费、无需银行卡）
 
-1. 用 GitHub 账号登录 [zeabur.com](https://zeabur.com)（免费，无需绑卡）
-2. 安装 CLI 后在本目录执行：
-   ```bash
-   zeabur login          # 浏览器里登录一次
-   zeabur deploy
-   ```
-3. 在 Zeabur 控制台把服务端口设为 `3000`，即可获得公开域名
+1. 把项目推到 GitHub（本仓库即为此准备）
+2. 用 GitHub 账号登录 [vercel.com](https://vercel.com)，点 **Add New → Project**，导入本仓库
+3. 框架选 **Other**，点 **Deploy** 即可获得 `https://life-copies.vercel.app` 公开域名
+4. 免费额度（Hobby）：个人项目永久免费、无需绑定银行卡
 
-### 备选：Render（全球访问）
+代码已适配 Vercel：`api/index.js` 是服务入口，`vercel.json` 把所有请求交给它处理，前端静态文件也由它直接输出。
+
+### 备选：Render / Docker（全球访问）
 
 1. 把项目推到 GitHub，在 [render.com](https://render.com) 新建 Web Service
 2. 选 Docker（有 `Dockerfile`），端口 `3000`
 3. 免费额度：闲置 15 分钟后休眠，有人访问会自动唤醒（首次打开稍慢）
+4. 注意：Render 新账号创建服务时通常需要绑定银行卡做身份验证（只预授权 1 美元、不扣费）；没有银行卡的话优先用 Vercel
+
+> Zeabur 免费共享集群已于 2026 年停止新项目，不再推荐。
 
 ### 数据持久化（重要）
 

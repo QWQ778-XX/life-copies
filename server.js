@@ -71,7 +71,7 @@ function publicSummary(c) {
   };
 }
 
-const server = http.createServer(async (req, res) => {
+async function handler(req, res) {
   const url = new URL(req.url, "http://localhost");
   const pathname = decodeURIComponent(url.pathname);
 
@@ -150,8 +150,14 @@ const server = http.createServer(async (req, res) => {
     console.error("server error:", e);
     sendJSON(res, 500, { error: e.message });
   }
-});
+}
 
-server.listen(PORT, () => {
-  console.log(`人生副本服务已启动: http://localhost:${PORT}`);
-});
+const server = http.createServer(handler);
+
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`人生副本服务已启动: http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { handler };
