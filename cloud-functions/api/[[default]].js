@@ -216,17 +216,27 @@ try {
 const KEY = "copies";
 const memoryStore = { data: null };
 
+function withTimeout(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(label + " timeout after " + ms + "ms")), ms);
+    promise.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
+
 async function loadCopies() {
   if (memoryStore.data) return memoryStore.data;
   if (store) {
     try {
-      const remote = await store.get(KEY, { type: "json", consistency: "strong" });
+      const remote = await withTimeout(store.get(KEY, { type: "json", consistency: "strong" }), 8000, "blob get");
       if (remote && Array.isArray(remote)) {
         memoryStore.data = remote;
         return remote;
       }
       const seed = seedCopies();
-      await store.setJSON(KEY, seed, { onlyIfNew: true });
+      await withTimeout(store.setJSON(KEY, seed, { onlyIfNew: true }), 8000, "blob seed write");
       memoryStore.data = seed;
       return seed;
     } catch (e) {
@@ -242,7 +252,7 @@ async function saveCopies(copies) {
   memoryStore.data = copies;
   if (store) {
     try {
-      await store.setJSON(KEY, copies);
+      await withTimeout(store.setJSON(KEY, copies), 8000, "blob save");
     } catch (e) {
       console.error("blob save failed:", e.message);
     }
@@ -252,14 +262,12 @@ async function saveCopies(copies) {
 /* ===== API 逻辑 ===== */
 let copies = [];
 
-loadCopies()
-  .then((list) => {
-    copies = list;
-    console.log("loaded " + copies.length + " copies (" + (store ? "edgeone blob" : "memory") + ")");
-  })
-  .catch((e) => {
-    console.error("loadCopies failed:", e.message);
-  });
+// 首次请求必须等数据加载完成，避免冷启动时返回空列表
+const ready = loadCopies().then((list) => {
+  copies = list;
+  console.log("loaded " + copies.length + " copies (" + (store ? "edgeone blob" : "memory") + ")");
+  return list;
+});
 
 function publicSummary(c) {
   return {
@@ -274,10 +282,12 @@ function publicSummary(c) {
 }
 
 async function listCopies() {
+  await ready;
   return copies.map(publicSummary);
 }
 
 async function createCopy(payload) {
+  await ready;
   const body = payload || {};
   if (!body.title || !body.config) {
     return { error: "缺少标题或配置" };
@@ -297,10 +307,12 @@ async function createCopy(payload) {
 }
 
 async function getCopy(id) {
+  await ready;
   return copies.find((c) => c.id === id) || null;
 }
 
 async function updateCopy(id, payload) {
+  await ready;
   const idx = copies.findIndex((c) => c.id === id);
   if (idx === -1) return null;
   const body = payload || {};
@@ -320,6 +332,7 @@ async function updateCopy(id, payload) {
 }
 
 async function removeCopy(id) {
+  await ready;
   const idx = copies.findIndex((c) => c.id === id);
   if (idx === -1) return false;
   copies.splice(idx, 1);
