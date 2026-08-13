@@ -160,4 +160,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = { handler };
+module.exports = handler;
+module.exports.handler = handler;
