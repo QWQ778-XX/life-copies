@@ -2,17 +2,43 @@ import express from "express";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const handler = require("./server-impl.js");
+const api = require("./copies-api.js");
 
 const app = express();
+app.use(express.json({ limit: "5mb" }));
 
-// EdgeOne 会把函数目录前缀（/api）剥掉后再交给 Express 框架，
-// 这里把前缀补回来，保证 server-impl 里以 /api 开头的路由能命中。
-app.use((req, res) => {
-  if (!req.url.startsWith("/api")) {
-    req.url = "/api" + req.url;
-  }
-  return handler(req, res);
+// EdgeOne 会把函数目录前缀（/api）剥掉后再交给 Express，
+// 这里同时注册带前缀和不带前缀两套路由，两种挂载方式都能命中。
+const P = (p) => [p, "/api" + p];
+
+app.get(P("/copies"), async (req, res) => {
+  res.json(await api.list());
 });
+
+app.post(P("/copies"), async (req, res) => {
+  const result = await api.create(req.body || {});
+  if (result.error) return res.status(400).json(result);
+  res.status(201).json(result);
+});
+
+app.get(P("/copies/:id"), async (req, res) => {
+  const copy = await api.get(req.params.id);
+  if (!copy) return res.status(404).json({ error: "副本不存在" });
+  res.json(copy);
+});
+
+app.put(P("/copies/:id"), async (req, res) => {
+  const copy = await api.update(req.params.id, req.body || {});
+  if (!copy) return res.status(404).json({ error: "副本不存在" });
+  res.json(copy);
+});
+
+app.delete(P("/copies/:id"), async (req, res) => {
+  const ok = await api.remove(req.params.id);
+  if (!ok) return res.status(404).json({ error: "副本不存在" });
+  res.json({ ok: true });
+});
+
+app.use((req, res) => res.status(404).json({ error: "not found" }));
 
 export default app;
