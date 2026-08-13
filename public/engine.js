@@ -1,4 +1,4 @@
-/* 人生副本 - 游戏引擎 */
+/* 无限流 · 副本试炼引擎 */
 
 function clamp(v, min, max) {
   if (v === undefined || v === null || isNaN(v)) return min;
@@ -55,7 +55,7 @@ function evalCondition(cond, stats) {
 }
 
 class LifeGame {
-  constructor(copy) {
+  constructor(copy, opts = {}) {
     const c = copy.config || {};
     this.copy = copy;
     this.name = c.name || "你";
@@ -67,14 +67,27 @@ class LifeGame {
     this.freeActions = Array.isArray(c.freeActions) ? c.freeActions : [];
     this.events = Array.isArray(c.events) ? c.events : [];
     this.endings = Array.isArray(c.endings) ? c.endings : [];
+    this.mission = c.mission || "";
+    this.difficulty = c.difficulty || null;
+    this.reward = c.reward || null;
+
+    this.bonuses = opts.bonuses || {};
+    this.modifiers = opts.modifiers || {};
 
     this.stats = {};
-    for (const [k, v] of Object.entries(c.stats || {})) this.stats[k] = Number(v) || 0;
+    for (const [k, v] of Object.entries(c.stats || {})) {
+      const meta = this.statMeta[k] || {};
+      const min = meta.min === undefined ? 0 : Number(meta.min);
+      const max = meta.max === undefined ? 999999 : Number(meta.max);
+      const bonus = Number(this.bonuses[k]) || 0;
+      this.stats[k] = clamp((Number(v) || 0) + bonus, min, max);
+    }
     this.age = this.startAge;
     this.year = this.year0 + (this.age - this.startAge);
     this.log = [];
     this.history = [{ age: this.age, year: this.year, stats: { ...this.stats } }];
     this.over = false;
+    this.dead = false;
     this.endReason = "";
     this.achievedEndings = [];
     this.usedOnce = new Set();
@@ -85,16 +98,21 @@ class LifeGame {
   }
 
   applyEffects(effects) {
-    for (const [k, delta] of Object.entries(effects || {})) {
+    const applied = {};
+    for (const [k, delta0] of Object.entries(effects || {})) {
       if (this.stats[k] === undefined) continue;
+      let delta = Number(delta0) || 0;
+      if (delta < 0 && this.modifiers.iron) delta = Math.ceil(delta * 0.7); // 铁壁：负面效果降低 30%
       const meta = this.statMeta[k] || {};
       const min = meta.min === undefined ? 0 : Number(meta.min);
       const max = meta.max === undefined ? 999999 : Number(meta.max);
-      this.stats[k] = clamp(this.stats[k] + (Number(delta) || 0), min, max);
+      this.stats[k] = clamp(this.stats[k] + delta, min, max);
+      applied[k] = delta;
     }
-    this.pushLog("状态变化：" + Object.entries(effects || {})
-      .map(([k, v]) => `${k} ${v > 0 ? "+" : ""}${v}`)
-      .join("，"));
+    const parts = Object.entries(applied);
+    if (parts.length) {
+      this.pushLog("状态变化：" + parts.map(([k, v]) => `${k} ${v > 0 ? "+" : ""}${v}`).join("，"));
+    }
   }
 
   randomDrift() {
@@ -154,7 +172,8 @@ class LifeGame {
     const health = this.stats["健康"];
     if (health !== undefined && health <= 0) {
       this.over = true;
-      this.endReason = "你的健康耗尽了，人生戛然而止。";
+      this.dead = true;
+      this.endReason = "你的生命耗尽，倒在了这个世界的某个角落。";
       return;
     }
     for (const end of this.endings) {
@@ -164,6 +183,19 @@ class LifeGame {
         this.pushLog(`达成结局「${end.name}」：${end.text || ""}`, "ending");
       }
     }
+  }
+
+  revive() {
+    this.over = false;
+    this.dead = false;
+    this.endReason = "";
+    if (this.stats["健康"] !== undefined) {
+      const meta = this.statMeta["健康"] || {};
+      const min = meta.min === undefined ? 0 : Number(meta.min);
+      const max = meta.max === undefined ? 100 : Number(meta.max);
+      this.stats["健康"] = clamp(30, min, max);
+    }
+    this.pushLog("护身符在最后一刻碎裂，你从死亡边缘爬了回来。", "event");
   }
 
   chartData() {
