@@ -37,12 +37,14 @@ node server.js
 
 ### 推荐：Vercel（免费、无需银行卡）
 
+已上线：**https://life-copies.vercel.app**
+
 1. 把项目推到 GitHub（本仓库即为此准备）
 2. 用 GitHub 账号登录 [vercel.com](https://vercel.com)，点 **Add New → Project**，导入本仓库
-3. 框架选 **Other**，点 **Deploy** 即可获得 `https://life-copies.vercel.app` 公开域名
+3. 框架选 **Node**（Vercel 会把根目录 `server.js` 当作服务入口），点 **Deploy** 即可
 4. 免费额度（Hobby）：个人项目永久免费、无需绑定银行卡
 
-代码已适配 Vercel：`api/index.js` 是服务入口，`vercel.json` 把所有请求交给它处理，前端静态文件也由它直接输出。
+代码无需额外适配：`server.js` 同时兼容本地运行（`node server.js`）和 Vercel 托管（直接导出请求处理函数）。
 
 ### 备选：Render / Docker（全球访问）
 
