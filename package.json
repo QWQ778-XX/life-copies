@@ -1,0 +1,10 @@
+{
+  "name": "life-copies",
+  "version": "0.1.0",
+  "description": "人生副本：创建、分享、体验别人的人生",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

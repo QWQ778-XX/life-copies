@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: life-copies
+    runtime: docker
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: UPSTASH_REST_URL
+        sync: false
+      - key: UPSTASH_REST_TOKEN
+        sync: false
